@@ -1,0 +1,64 @@
+# CMake 构建目录
+/build/
+/build-*/
+/Build/
+/CMakeBuild/
+
+# CMake 自动生成的文件
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+/.cache/
+
+# C++ 编译中间产物
+*.obj
+*.o
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exp
+*.ilk
+*.pdb
+
+# 可执行文件
+*.exe
+*.out
+# 若可执行文件有自定义名称（如 my_opengl_app），可在此处单独排除该文件或其目录
+
+# Visual Studio / VS Code 生成目录与配置文件
+.vs/
+.vscode/
+x64/
+x86/
+ipch/
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# 依赖项下载与缓存目录（如 FetchContent 或 Hunter 等）
+/_deps/
+/deps/
+/vcpkg_installed/
+packages/
+
+# 常见打包与日志文件
+*.log
+*.zip
+*.tar
+*.gz
+*.rar
+
+# 操作系统自动生成文件
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
