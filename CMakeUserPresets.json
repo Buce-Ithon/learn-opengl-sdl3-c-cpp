@@ -1,0 +1,63 @@
+{
+    "version":6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "ninja-local-debug",
+            "displayName": "Ninja (Debug) (Local)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/ninja/debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/ninja/debug"
+            }
+        },
+        {
+            "name": "ninja-local-release",
+            "displayName": "Ninja (Release) (Local)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/ninja/release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/ninja/release"
+            }
+        },
+        {
+            "name": "msvc-local",
+            "displayName": "Visual Studio 17 2022 (Local)",
+            "generator": "Visual Studio 17 2022",
+            "binaryDir": "${sourceDir}/build/msvc",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/install/msvc"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "ninja-local-debug",
+            "configurePreset": "ninja-local-debug",
+            "jobs": 8
+        },
+        {
+            "name": "ninja-local-release",
+            "configurePreset": "ninja-local-release",
+            "jobs": 8
+        },
+        {
+            "name": "msvc-local-debug",
+            "configurePreset": "msvc-local",
+            "configuration": "Debug",
+            "jobs": 8
+        },
+        {
+            "name": "msvc-local-release",
+            "configurePreset": "msvc-local",
+            "configuration": "Release",
+            "jobs": 8
+        }
+    ]
+}
