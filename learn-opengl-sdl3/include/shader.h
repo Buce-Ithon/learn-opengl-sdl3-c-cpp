@@ -8,6 +8,8 @@
 #include <fstream>
 #include <iostream>
 
+#include <unordered_map>
+
 class Shader {
 public:
     // program ID
