@@ -16,5 +16,5 @@ public:
 private:
     SDL_Window*   window_    = nullptr;
     SDL_GLContext glContext_ = nullptr;
-    bool          running_   = true;
+    //bool          running_   = true;
 };

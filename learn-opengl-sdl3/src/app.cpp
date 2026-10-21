@@ -16,6 +16,10 @@ SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
         return SDL_APP_FAILURE;
     }
     
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    
     window_ = SDL_CreateWindow("learn-opengl-sdl3", 800, 600, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_OPENGL);
     if (!window_) {
         SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
@@ -32,6 +36,11 @@ SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
         return SDL_APP_FAILURE;
     }
     
+    if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(SDL_GL_GetProcAddress))) {
+        SDL_Log("Failed to load GLAD: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+    
     // Sync viewport manually
     int fbW, fbH;
     SDL_GetWindowSizeInPixels(window_, &fbW, &fbH);
@@ -41,8 +50,6 @@ SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
 }
 
 SDL_AppResult App::iterate() { 
-    if (!running_) return SDL_APP_SUCCESS;
-    
     // TODO every frame render actions
     // ...
     
