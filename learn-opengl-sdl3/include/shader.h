@@ -28,8 +28,8 @@ public:
             vsFile.open(vsPath);
             fsFile.open(fsPath);
             // directly get string from file (>=C++11)
-            std::string vCode((std::istreambuf_iterator<char>(vsFile)), std::istreambuf_iterator<char>());
-            std::string fCode((std::istreambuf_iterator<char>(fsFile)), std::istreambuf_iterator<char>());
+            vCode = std::string((std::istreambuf_iterator<char>(vsFile)), std::istreambuf_iterator<char>());
+            fCode = std::string((std::istreambuf_iterator<char>(fsFile)), std::istreambuf_iterator<char>());
         } catch (std::ifstream::failure &e) {
             std::cout << "ERROR::SHADER_FILE_NOT_SUCCESSFULLY_READ: " << e.what() << std::endl;
         }
@@ -44,7 +44,7 @@ public:
         checkCompileErrors(vertex, "VERTEX");
         // fragment shader
         GLuint fragment = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragment, 1, &vsCode, NULL);
+        glShaderSource(fragment, 1, &fsCode, NULL);
         glCompileShader(fragment);
         checkCompileErrors(fragment, "FRAGMENT");
         // shader program
