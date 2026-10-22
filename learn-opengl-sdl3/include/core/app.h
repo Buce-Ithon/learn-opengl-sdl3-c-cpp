@@ -5,6 +5,18 @@
 #include <memory>
 #include "shader.h"
 
+enum class Pipeline {
+    Single,
+    Matrix
+};
+
+struct Effect {
+    const char* name;
+    const char* fragment;
+    Pipeline pipeline;
+    const char* description;
+};
+
 class App {
 public:
     App()  = default;
@@ -26,4 +38,6 @@ private:
     Uint64 startTicks_ = 0;
     
     void setCommonUniforms(const Shader& shader, int framebufferWidth, int framebufferHeight, float time);
+    
+    const Effect* selectedEffect_ = nullptr;
 };

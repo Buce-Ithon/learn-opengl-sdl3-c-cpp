@@ -11,9 +11,54 @@
 #include "SDL3/SDL_timer.h"
 #include "SDL3/SDL_mouse.h"
 
+#include <iostream>
 #include <string>
 
-SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
+namespace {
+    constexpr Effect effects[] = {
+        {"matrix", "matrix.frag", Pipeline::Matrix, "Character rain"}, 
+        {"mt_fuji_watercolor", "mt_fuji_watercolor.frag", Pipeline::Single, "Mt. Fuji watercolor"},
+    };
+    
+    const Effect* findEffect(const std::string& name) {
+        for (const auto& effect : effects) {
+            if (name == effect.name) {
+                return &effect;
+            }
+        }
+        return nullptr;
+    }
+}
+
+SDL_AppResult App::init(int argc, char** argv) {
+    // Parse command-line arguments
+    selectedEffect_ = &effects[0]; // default matrix.frag
+
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+
+        if (arg == "--list") {
+            for (const auto& effect : effects) {
+                std::cout << effect.name << " " << effect.description << '\n';
+            }
+            return SDL_APP_SUCCESS;
+        }
+        
+        if (arg == "--effect") {
+            if (++i == argc) {
+                std::cerr << "--effect requires a name.\n";
+                return SDL_APP_FAILURE;
+            }
+            
+            selectedEffect_ = findEffect(argv[i]);
+            if (!selectedEffect_) {
+                std::cerr << "Unkown effect: " << argv[i] << '\n';
+                return SDL_APP_FAILURE;
+            }
+        }
+    }
+
+    // SDL initialization
     SDL_SetAppMetadata("Learn OpenGL SDL3", "1.0", "io.github.buce-ithon.learnopenglsdl3");
     
     if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -47,19 +92,24 @@ SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
     }
     
     // Load shader
-    shader_ = std::make_unique<Shader>("./assets/shaders/fullscreen.vert", "./assets/shaders/mt_fuji_watercolor.frag");
+    const std::string fragmentPath = std::string("./assets/shaders/") + selectedEffect_->fragment;
+    shader_ = std::make_unique<Shader>("./assets/shaders/fullscreen.vert", fragmentPath.c_str());
     GLint linked = GL_FALSE;
     glGetProgramiv(shader_->ID, GL_LINK_STATUS, &linked);
     if (linked != GL_TRUE) {
         SDL_Log("Failed to link the Matrix shader program: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-    matrixTextures_ = matrix::createTextures();
-    shader_->use();
-    shader_->setInt("iChannel0", 0);
-    shader_->setInt("iChannel1", 1);
-    for (int i = 0; i < 2; ++i) {
-        shader_->setVec3("iChannelResolution[" + std::to_string(i) + "]", static_cast<float>(matrix::textureSize), static_cast<float>(matrix::textureSize), 1.0f);
+    if (selectedEffect_->pipeline == Pipeline::Matrix) {
+        matrixTextures_ = matrix::createTextures();
+
+        shader_->use();
+        shader_->setInt("iChannel0", 0);
+        shader_->setInt("iChannel1", 1);
+
+        for (int i = 0; i < 2; ++i) {
+            shader_->setVec3("iChannelResolution[" + std::to_string(i) + "]", static_cast<float>(matrix::textureSize), static_cast<float>(matrix::textureSize), 1.0f);
+        }
     }
     glGenVertexArrays(1, &vertexArray_);
     startTicks_ = SDL_GetTicks();
@@ -88,10 +138,13 @@ SDL_AppResult App::iterate() {
     shader_->use();
     setCommonUniforms(*shader_, width, height, time);
     
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, matrixTextures_[0]);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, matrixTextures_[1]);
+    if (selectedEffect_->pipeline == Pipeline::Matrix) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, matrixTextures_[0]);
+
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, matrixTextures_[1]);
+    }
     glBindVertexArray(vertexArray_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     
