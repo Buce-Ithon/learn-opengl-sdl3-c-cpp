@@ -18,6 +18,14 @@ namespace {
     constexpr Effect effects[] = {
         {"matrix", "matrix.frag", Pipeline::Textured, "Character rain"}, 
         {"mt_fuji_watercolor", "mt_fuji_watercolor.frag", Pipeline::Single, "Mt. Fuji watercolor"},
+        {"van_gogh_sunset", "van_gogh_sunset.frag", Pipeline::Single, "Van Gogh Sunset"},
+        {"square_bg_v2", "square_bg_v2.frag", Pipeline::Single, "Square Background V2"},
+        {"paper_sticks", "paper_sticks.frag", Pipeline::Single, "Paper Sticks"},
+        {"infinity_loader", "infinity_loader.frag", Pipeline::Single, "Infinity loader"},
+        {"octagrams", "octagrams.frag", Pipeline::Single, "Octagrams"},
+        {"neon_infinity", "neon_infinity.frag", Pipeline::Single, "NEON INFINITY"},
+        {"cyber_fuji_2020", "cyber_fuji_2020.frag", Pipeline::Single, "Cyber Fuji 2020"},
+        {"pretty_hip", "pretty_hip.frag", Pipeline::Single, "Pretty Hip"}
     };
     
     const Effect* findEffect(const std::string& name) {
