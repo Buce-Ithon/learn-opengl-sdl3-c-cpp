@@ -8,7 +8,13 @@
 
 enum class Pipeline {
     Single, // Single-pass shader that does not rely on additional textures or off-screen rendering
-    Textured // Requires creating and binding an additional texture, as well as setting a sampler uniform.
+    TwoPass
+};
+
+enum class ResourceProfile {
+    None,
+    GlyphAtlasAndNoise, // matrix: Glyph atlas (texture) and random noise (texture)
+    NoiseAndWhite // up_in_cloud_sea: Noise texture and white texture
 };
 
 enum class InteractionMode {
@@ -21,6 +27,7 @@ struct Effect {
     const char* fragment;
     Pipeline pipeline;
     const char* description;
+    ResourceProfile resources;
     InteractionMode interaction;
 };
 
@@ -69,4 +76,15 @@ private:
     MoonInteraction moonInteraction_;
     Uint64 previousFrameTicks_ = 0;
     void updateMoon(float aspect, float time, float deltaTime);
+    bool cursorScenePosition(glm::vec2& point) const;
+    float horizonHeight(float x, float time) const;
+    
+    std::unique_ptr<Shader> bufferShader_;
+    GLuint noiseTexture_ = 0;
+    GLuint whiteTexture_ = 0;
+    GLuint bufferFramebuffer_  = 0;
+    GLuint bufferColorTexture_ = 0;
+    int bufferTargetWidth_  = 0;
+    int bufferTargetHeight_ = 0;
+    bool ensureBufferTarget(int width, int height);
 };
