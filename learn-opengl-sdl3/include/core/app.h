@@ -1,6 +1,9 @@
 #pragma once
 
 #include "SDL3/SDL_init.h"
+#include <array>
+#include <memory>
+#include "shader.h"
 
 class App {
 public:
@@ -17,4 +20,8 @@ private:
     SDL_Window*   window_    = nullptr;
     SDL_GLContext glContext_ = nullptr;
     //bool          running_   = true;
+    std::unique_ptr<Shader> shader_;
+    std::array<GLuint, 2> matrixTextures_{};
+    GLuint vertexArray_ = 0;
+    Uint64 startTicks_ = 0;
 };

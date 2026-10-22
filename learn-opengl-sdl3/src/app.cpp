@@ -7,6 +7,10 @@
 #include "core/mouse_event.h"
 #include "core/shader.h"
 #include "glad/glad.h"
+#include "misc/example_matrix_textures.h"
+#include "SDL3/SDL_timer.h"
+
+#include <string>
 
 SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
     SDL_SetAppMetadata("Learn OpenGL SDL3", "1.0", "io.github.buce-ithon.learnopenglsdl3");
@@ -20,7 +24,7 @@ SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     
-    window_ = SDL_CreateWindow("learn-opengl-sdl3", 800, 600, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_OPENGL);
+    window_ = SDL_CreateWindow("learn-opengl-sdl3", 800, 600, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_OPENGL);
     if (!window_) {
         SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
@@ -41,6 +45,24 @@ SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
         return SDL_APP_FAILURE;
     }
     
+    // Load shader
+    shader_ = std::make_unique<Shader>("./assets/shaders/fullscreen.vert", "./assets/shaders/matrix.frag");
+    GLint linked = GL_FALSE;
+    glGetProgramiv(shader_->ID, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        SDL_Log("Failed to link the Matrix shader program: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+    matrixTextures_ = matrix::createTextures();
+    shader_->use();
+    shader_->setInt("iChannel0", 0);
+    shader_->setInt("iChannel1", 1);
+    for (int i = 0; i < 2; ++i) {
+        shader_->setVec3("iChannelResolution[" + std::to_string(i) + "]", static_cast<float>(matrix::textureSize), static_cast<float>(matrix::textureSize), 1.0f);
+    }
+    glGenVertexArrays(1, &vertexArray_);
+    startTicks_ = SDL_GetTicks();
+    
     // Sync viewport manually
     int fbW, fbH;
     SDL_GetWindowSizeInPixels(window_, &fbW, &fbH);
@@ -50,10 +72,35 @@ SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
 }
 
 SDL_AppResult App::iterate() { 
-    // TODO every frame render actions
-    // ...
+    int width  = 0;
+    int height = 0;
+    if (!SDL_GetWindowSizeInPixels(window_, &width, &height) || width <= 0 || height <= 0) {
+        return SDL_APP_CONTINUE;
+    }
     
-    if (window_) SDL_GL_SwapWindow(window_);
+    const float time = static_cast<float>(SDL_GetTicks() - startTicks_) / 1000.0f;
+    
+    glViewport(0, 0, width, height);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    shader_->use();
+    shader_->setVec3("iResolution", static_cast<float>(width), static_cast<float>(height), 1.0f);
+    shader_->setFloat("iTime", time);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, matrixTextures_[0]);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, matrixTextures_[1]);
+    glBindVertexArray(vertexArray_);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    
+    if (glGetError() != GL_NO_ERROR) {
+        SDL_Log("OpenGL error during shader (Matrix) rendering: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+    
+    SDL_GL_SwapWindow(window_);
 
     return SDL_APP_CONTINUE;
 }
@@ -73,7 +120,21 @@ SDL_AppResult App::event(SDL_Event *event) {
 }
 
 void App::quit(SDL_AppResult /*result*/) {
+    // Clear OpenGL objects before destroy glContext
     if (glContext_) {
+        if (vertexArray_ != 0) {
+            glDeleteVertexArrays(1, &vertexArray_);
+            vertexArray_ = 0;
+        }
+
+        glDeleteTextures(static_cast<GLsizei>(matrixTextures_.size()), matrixTextures_.data());
+        matrixTextures_.fill(0);
+        
+        if (shader_) {
+            glDeleteProgram(shader_->ID);
+            shader_.reset();
+        }
+        
         SDL_GL_DestroyContext(glContext_);
         glContext_ = nullptr;
     }
