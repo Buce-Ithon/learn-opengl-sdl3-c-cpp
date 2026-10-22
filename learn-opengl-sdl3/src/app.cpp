@@ -16,7 +16,7 @@
 
 namespace {
     constexpr Effect effects[] = {
-        {"matrix", "matrix.frag", Pipeline::Matrix, "Character rain"}, 
+        {"matrix", "matrix.frag", Pipeline::Textured, "Character rain"}, 
         {"mt_fuji_watercolor", "mt_fuji_watercolor.frag", Pipeline::Single, "Mt. Fuji watercolor"},
     };
     
@@ -100,7 +100,7 @@ SDL_AppResult App::init(int argc, char** argv) {
         SDL_Log("Failed to link the Matrix shader program: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
-    if (selectedEffect_->pipeline == Pipeline::Matrix) {
+    if (selectedEffect_->pipeline == Pipeline::Textured) {
         matrixTextures_ = matrix::createTextures();
 
         shader_->use();
@@ -138,7 +138,7 @@ SDL_AppResult App::iterate() {
     shader_->use();
     setCommonUniforms(*shader_, width, height, time);
     
-    if (selectedEffect_->pipeline == Pipeline::Matrix) {
+    if (selectedEffect_->pipeline == Pipeline::Textured) {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, matrixTextures_[0]);
 

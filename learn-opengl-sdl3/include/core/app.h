@@ -6,8 +6,8 @@
 #include "shader.h"
 
 enum class Pipeline {
-    Single,
-    Matrix
+    Single, // Single-pass shader that does not rely on additional textures or off-screen rendering
+    Textured // Requires creating and binding an additional texture, as well as setting a sampler uniform.
 };
 
 struct Effect {
