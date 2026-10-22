@@ -1,11 +1,11 @@
-#include "app.h"
+#include "core/app.h"
 #include "SDL3/SDL_error.h"
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_init.h"
 #include "SDL3/SDL_keycode.h"
 #include "SDL3/SDL_video.h"
-#include "mouse_event.h"
-#include "shader.h"
+#include "core/mouse_event.h"
+#include "core/shader.h"
 #include "glad/glad.h"
 
 SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {

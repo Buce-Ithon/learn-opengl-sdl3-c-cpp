@@ -2,7 +2,7 @@
 #include "SDL3/SDL_main.h"
 #include "SDL3/SDL_init.h"
 
-#include "app.h"
+#include "core/app.h"
 
 extern "C" SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv) {
     auto *app = new App();
