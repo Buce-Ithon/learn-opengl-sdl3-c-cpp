@@ -25,5 +25,5 @@ inline SDL_HitTestResult HitTestCallback(SDL_Window *window, const SDL_Point *ar
         return SDL_HITTEST_DRAGGABLE;
     }
     
-    return SDL_HITTEST_DRAGGABLE;
+    return SDL_HITTEST_NORMAL;
 }
