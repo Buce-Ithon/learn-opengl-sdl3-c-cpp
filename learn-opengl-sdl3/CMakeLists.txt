@@ -20,3 +20,7 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         "${CMAKE_CURRENT_SOURCE_DIR}/assets"
         "$<TARGET_FILE_DIR:${PROJECT_NAME}>/assets"
 )
+
+if (WIN32)
+    target_sources(${PROJECT_NAME} PRIVATE resources/app.rc)
+endif()
