@@ -13,19 +13,21 @@
 
 #include <iostream>
 #include <string>
+#include <cmath>
 
 namespace {
     constexpr Effect effects[] = {
-        {"matrix", "matrix.frag", Pipeline::Textured, "Character rain"}, 
-        {"mt_fuji_watercolor", "mt_fuji_watercolor.frag", Pipeline::Single, "Mt. Fuji watercolor"},
-        {"van_gogh_sunset", "van_gogh_sunset.frag", Pipeline::Single, "Van Gogh Sunset"},
-        {"square_bg_v2", "square_bg_v2.frag", Pipeline::Single, "Square Background V2"},
-        {"paper_sticks", "paper_sticks.frag", Pipeline::Single, "Paper Sticks"},
-        {"infinity_loader", "infinity_loader.frag", Pipeline::Single, "Infinity loader"},
-        {"octagrams", "octagrams.frag", Pipeline::Single, "Octagrams"},
-        {"neon_infinity", "neon_infinity.frag", Pipeline::Single, "NEON INFINITY"},
-        {"cyber_fuji_2020", "cyber_fuji_2020.frag", Pipeline::Single, "Cyber Fuji 2020"},
-        {"pretty_hip", "pretty_hip.frag", Pipeline::Single, "Pretty Hip"}
+        {"matrix", "matrix.frag", Pipeline::Textured, "Character rain", InteractionMode::None}, 
+        {"mt_fuji_watercolor", "mt_fuji_watercolor.frag", Pipeline::Single, "Mt. Fuji watercolor", InteractionMode::None},
+        {"van_gogh_sunset", "van_gogh_sunset.frag", Pipeline::Single, "Van Gogh Sunset", InteractionMode::None},
+        {"square_bg_v2", "square_bg_v2.frag", Pipeline::Single, "Square Background V2", InteractionMode::None},
+        {"paper_sticks", "paper_sticks.frag", Pipeline::Single, "Paper Sticks", InteractionMode::None},
+        {"infinity_loader", "infinity_loader.frag", Pipeline::Single, "Infinity loader", InteractionMode::None},
+        {"octagrams", "octagrams.frag", Pipeline::Single, "Octagrams", InteractionMode::None},
+        {"neon_infinity", "neon_infinity.frag", Pipeline::Single, "NEON INFINITY", InteractionMode::None},
+        {"cyber_fuji_2020", "cyber_fuji_2020.frag", Pipeline::Single, "Cyber Fuji 2020", InteractionMode::None},
+        {"pretty_hip", "pretty_hip.frag", Pipeline::Single, "Pretty Hip", InteractionMode::None},
+        {"midmoon", "midmoon.frag", Pipeline::Single, "Interactive Moonrise", InteractionMode::Moon}
     };
     
     const Effect* findEffect(const std::string& name) {
@@ -121,6 +123,8 @@ SDL_AppResult App::init(int argc, char** argv) {
     }
     glGenVertexArrays(1, &vertexArray_);
     startTicks_ = SDL_GetTicks();
+    previousFrameTicks_ = startTicks_;
+    moonInteraction_.ripples.fill(glm::vec4(0.0f));
     
     // Sync viewport manually
     int fbW, fbH;
@@ -137,7 +141,14 @@ SDL_AppResult App::iterate() {
         return SDL_APP_CONTINUE;
     }
     
-    const float time = static_cast<float>(SDL_GetTicks() - startTicks_) / 1000.0f;
+    const Uint64 nowTicks = SDL_GetTicks();
+    const float time = static_cast<float>(nowTicks - startTicks_) / 1000.0f;
+    const float deltaTime = static_cast<float>(nowTicks - previousFrameTicks_) / 1000.0f;
+    previousFrameTicks_ = nowTicks;
+    
+    if (selectedEffect_->interaction == InteractionMode::Moon) {
+        updateMoon(static_cast<float>(width) / static_cast<float>(height), time, deltaTime);
+    }
     
     glViewport(0, 0, width, height);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -145,6 +156,16 @@ SDL_AppResult App::iterate() {
 
     shader_->use();
     setCommonUniforms(*shader_, width, height, time);
+    
+    if (selectedEffect_->interaction == InteractionMode::Moon) {
+        shader_->setFloat("uZoom", moonInteraction_.zoom);
+        shader_->setVec2("uViewCenter", moonInteraction_.viewCenter);
+        shader_->setVec3("uMoon", moonInteraction_.moon);
+        
+        for (int i = 0; i < moonRippleCount; ++i) {
+            shader_->setVec4("uRipples[" + std::to_string(i) + "]", moonInteraction_.ripples[i]);
+        }
+    }
     
     if (selectedEffect_->pipeline == Pipeline::Textured) {
         glActiveTexture(GL_TEXTURE0);
@@ -227,4 +248,33 @@ void App::setCommonUniforms(const Shader &shader, int framebufferWidth,  int fra
     }
     
     shader.setVec2("uMouse", mouse);
+}
+
+void App::updateMoon(float aspect, float time, float deltaTime) {
+    constexpr float horizonBase = -0.12f;
+    constexpr float damping = 4.5f;
+    constexpr float frequency = 12.0f;
+    
+    auto& state = moonInteraction_;
+
+    const float a = state.moonStretch;
+    const float b = (state.moonVelocity + damping * a) / frequency;
+    const float decay = std::exp(-damping * deltaTime);
+    const float c = std::cos(frequency * deltaTime);
+    const float s = std::sin(frequency * deltaTime);
+
+    state.moonStretch = decay * (a * c + b * s);
+    state.moonVelocity = decay * (
+        (b * frequency - damping * a) * c -
+        (a * frequency + damping * b) * s
+    );
+
+    state.moon = glm::vec3(
+        aspect * 0.22f,
+        horizonBase + moonRadius + 0.025f +
+            0.23f * (1.0f - std::exp(-time * 0.018f)),
+        moonRadius * (1.0f + state.moonStretch)
+    );
+    
+    state.frameTime = time;
 }
