@@ -47,7 +47,7 @@ SDL_AppResult App::init(int /*argc*/, char** /*argv*/) {
     }
     
     // Load shader
-    shader_ = std::make_unique<Shader>("./assets/shaders/fullscreen.vert", "./assets/shaders/matrix.frag");
+    shader_ = std::make_unique<Shader>("./assets/shaders/fullscreen.vert", "./assets/shaders/mt_fuji_watercolor.frag");
     GLint linked = GL_FALSE;
     glGetProgramiv(shader_->ID, GL_LINK_STATUS, &linked);
     if (linked != GL_TRUE) {
