@@ -9,6 +9,7 @@
 #include "glad/glad.h"
 #include "misc/example_matrix_textures.h"
 #include "SDL3/SDL_timer.h"
+#include "SDL3/SDL_mouse.h"
 
 #include <string>
 
@@ -85,8 +86,7 @@ SDL_AppResult App::iterate() {
     glClear(GL_COLOR_BUFFER_BIT);
 
     shader_->use();
-    shader_->setVec3("iResolution", static_cast<float>(width), static_cast<float>(height), 1.0f);
-    shader_->setFloat("iTime", time);
+    setCommonUniforms(*shader_, width, height, time);
     
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, matrixTextures_[0]);
@@ -138,4 +138,32 @@ void App::quit(SDL_AppResult /*result*/) {
         SDL_GL_DestroyContext(glContext_);
         glContext_ = nullptr;
     }
+}
+
+void App::setCommonUniforms(const Shader &shader, int framebufferWidth,  int framebufferHeight, float time) {
+    shader.use();
+
+    shader.setVec2("uResolution", static_cast<float>(framebufferWidth), static_cast<float>(framebufferHeight));
+    shader.setFloat("uTime", time);
+    
+    shader.setVec3("iResolution", static_cast<float>(framebufferWidth), static_cast<float>(framebufferHeight), 1.0f);
+    shader.setFloat("iTime", time);
+    
+    int windowWidth = 0;
+    int windowHeight = 0;
+    SDL_GetWindowSize(window_, &windowWidth, &windowHeight);
+    
+    float mouseX = 0.0f;
+    float mouseY = 0.0f;
+    SDL_GetMouseState(&mouseX, &mouseY);
+    
+    glm::vec2 mouse(0.0f);
+    if (windowWidth > 0 && windowHeight > 0 && mouseX >= 0.0f && mouseY >= 0.0f && mouseX < windowWidth && mouseY < windowHeight) {
+        // In SDL, mouse coordinates use the top-left corner of the window as the origin;
+        // in GLSL, coordinates use the bottom-left corner as the origin and are based on the framebuffer's pixel dimensions.
+        mouse.x = mouseX / windowWidth * framebufferWidth;
+        mouse.y = (1.0f - mouseY / windowHeight) * framebufferHeight;
+    }
+    
+    shader.setVec2("uMouse", mouse);
 }

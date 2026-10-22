@@ -24,4 +24,6 @@ private:
     std::array<GLuint, 2> matrixTextures_{};
     GLuint vertexArray_ = 0;
     Uint64 startTicks_ = 0;
+    
+    void setCommonUniforms(const Shader& shader, int framebufferWidth, int framebufferHeight, float time);
 };
