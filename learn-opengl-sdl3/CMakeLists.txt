@@ -22,5 +22,5 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 )
 
 if (WIN32)
-    target_sources(${PROJECT_NAME} PRIVATE resources/app.rc)
+    target_sources(${PROJECT_NAME} PRIVATE resources/windows_resources.rc)
 endif()
