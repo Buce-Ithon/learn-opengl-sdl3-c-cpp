@@ -73,6 +73,13 @@ namespace shader_test
         const bool complete = glCheckFramebufferStatus(GL_FRAMEBUFFER)
                             == GL_FRAMEBUFFER_COMPLETE;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        if (!complete)
+        {
+            glDeleteTextures(1, &colorTexture);
+            glDeleteFramebuffers(1, &framebuffer);
+            colorTexture = 0;
+            framebuffer = 0;
+        }
         return complete;
     }
 }

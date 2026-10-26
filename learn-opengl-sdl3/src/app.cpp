@@ -10,55 +10,34 @@
 #include "misc/example_matrix_textures.h"
 #include "SDL3/SDL_timer.h"
 #include "SDL3/SDL_mouse.h"
+#include "SDL3/SDL_filesystem.h"
 #include "misc/shader_test_resources.h"
 
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <cmath>
 #include <algorithm>
 
 namespace {
-    constexpr Effect effects[] = {
-        {"matrix", "matrix.frag", Pipeline::Single, "Character rain", ResourceProfile::GlyphAtlasAndNoise, InteractionMode::None}, 
-        {"mt_fuji_watercolor", "mt_fuji_watercolor.frag", Pipeline::Single, "Mt. Fuji watercolor", ResourceProfile::None, InteractionMode::None},
-        {"van_gogh_sunset", "van_gogh_sunset.frag", Pipeline::Single, "Van Gogh Sunset", ResourceProfile::None, InteractionMode::None},
-        {"square_bg_v2", "square_bg_v2.frag", Pipeline::Single, "Square Background V2", ResourceProfile::None, InteractionMode::None},
-        {"paper_sticks", "paper_sticks.frag", Pipeline::Single, "Paper Sticks", ResourceProfile::None, InteractionMode::None},
-        {"infinity_loader", "infinity_loader.frag", Pipeline::Single, "Infinity loader", ResourceProfile::None, InteractionMode::None},
-        {"octagrams", "octagrams.frag", Pipeline::Single, "Octagrams", ResourceProfile::None, InteractionMode::None},
-        {"neon_infinity", "neon_infinity.frag", Pipeline::Single, "NEON INFINITY", ResourceProfile::None, InteractionMode::None},
-        {"cyber_fuji_2020", "cyber_fuji_2020.frag", Pipeline::Single, "Cyber Fuji 2020", ResourceProfile::None, InteractionMode::None},
-        {"pretty_hip", "pretty_hip.frag", Pipeline::Single, "Pretty Hip", ResourceProfile::None, InteractionMode::None},
-        {"midmoon", "midmoon.frag", Pipeline::Single, "Interactive Moonrise", ResourceProfile::None, InteractionMode::Moon},
-        {"up_in_cloud_sea_buffer", "up_in_cloud_sea_buffer.frag", Pipeline::Single, "Buffer preview before Image", ResourceProfile::NoiseAndWhite, InteractionMode::None},
-        {"up_in_cloud_sea_image", "up_in_cloud_sea_image.frag", Pipeline::TwoPass, "Buffer + Image", ResourceProfile::NoiseAndWhite, InteractionMode::None}
-    };
-    
-    const Effect* findEffect(const std::string& name) {
-        for (const auto& effect : effects) {
-            if (name == effect.name) {
-                return &effect;
-            }
-        }
-        return nullptr;
+std::filesystem::path shaderPath(std::string_view filename) {
+    const char* basePath = SDL_GetBasePath();
+    if (basePath == nullptr) {
+        throw std::runtime_error(std::string("Unable to determine application directory: ") + SDL_GetError());
     }
-    
-    bool isLinked(const Shader& shader) {
-        GLint linked = GL_FALSE;
-        glGetProgramiv(shader.ID, GL_LINK_STATUS, &linked);
-        return linked;
-    }
+    return std::filesystem::path(basePath) / "assets" / "shaders" / filename;
+}
 }
 
 SDL_AppResult App::init(int argc, char** argv) {
     // Parse command-line arguments
-    selectedEffect_ = &effects[0]; // default matrix.frag
+    selectedEffect_ = &availableEffects().front();
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
 
         if (arg == "--list") {
-            for (const auto& effect : effects) {
+            for (const auto& effect : availableEffects()) {
                 std::cout << effect.name << " " << effect.description << '\n';
             }
             return SDL_APP_SUCCESS;
@@ -112,14 +91,18 @@ SDL_AppResult App::init(int argc, char** argv) {
     }
     
     // Load shader
-    const std::string fragmentPath = std::string("./assets/shaders/") + selectedEffect_->fragment;
-    shader_ = std::make_unique<Shader>("./assets/shaders/fullscreen.vert", fragmentPath.c_str());
-    if (!isLinked(*shader_)) {
-        SDL_Log("Failed to link the Matrix shader program: %s", SDL_GetError());
+    std::filesystem::path vertexPath;
+    try {
+        vertexPath = shaderPath("fullscreen.vert");
+        const std::filesystem::path fragmentPath = shaderPath(selectedEffect_->fragment);
+        shader_ = std::make_unique<Shader>(vertexPath.string().c_str(), fragmentPath.string().c_str());
+    } catch (const std::exception& error) {
+        SDL_Log("Failed to create shader program: %s", error.what());
         return SDL_APP_FAILURE;
     }
     if (selectedEffect_->resources == ResourceProfile::GlyphAtlasAndNoise) {
-        matrixTextures_ = matrix::createTextures();
+        const auto textureIds = matrix::createTextures();
+        for (std::size_t i = 0; i < matrixTextures_.size(); ++i) matrixTextures_[i].reset(textureIds[i]);
 
         shader_->use();
         shader_->setInt("iChannel0", 0);
@@ -130,20 +113,21 @@ SDL_AppResult App::init(int argc, char** argv) {
         }
     }
     if (selectedEffect_->resources == ResourceProfile::NoiseAndWhite) {
-        noiseTexture_ = shader_test::createNoiseTexture();
-        whiteTexture_ = shader_test::createWhiteTexture();
+        noiseTexture_.reset(shader_test::createNoiseTexture());
+        whiteTexture_.reset(shader_test::createWhiteTexture());
     }
     if (selectedEffect_->pipeline == Pipeline::TwoPass) {
-        bufferShader_ = std::make_unique<Shader>("./assets/shaders/fullscreen.vert", "./assets/shaders/up_in_cloud_sea_buffer.frag");
-        if (!isLinked(*bufferShader_)) {
-            SDL_Log("Failed to link up_to_cloud_sea Buffer shader program: %s", SDL_GetError());
+        try {
+            const std::filesystem::path bufferPath = shaderPath("up_in_cloud_sea_buffer.frag");
+            bufferShader_ = std::make_unique<Shader>(vertexPath.string().c_str(), bufferPath.string().c_str());
+        } catch (const std::exception& error) {
+            SDL_Log("Failed to create buffer shader program: %s", error.what());
             return SDL_APP_FAILURE;
         }
     }
-    glGenVertexArrays(1, &vertexArray_);
+    vertexArray_.create();
     startTicks_ = SDL_GetTicks();
     previousFrameTicks_ = startTicks_;
-    moonInteraction_.ripples.fill(glm::vec4(0.0f));
     
     // Sync viewport manually
     int fbW, fbH;
@@ -166,14 +150,14 @@ SDL_AppResult App::iterate() {
     previousFrameTicks_ = nowTicks;
     
     if (selectedEffect_->interaction == InteractionMode::Moon) {
-        updateMoon(static_cast<float>(width) / static_cast<float>(height), time, deltaTime);
+        moonController_.update(static_cast<float>(width) / static_cast<float>(height), time, deltaTime);
     }
     
     glViewport(0, 0, width, height);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     
-    glBindVertexArray(vertexArray_);
+    glBindVertexArray(vertexArray_.id());
 
     // Pass 1: Only up_in_cloud_sea_image need it.
     // Buffer shader render to an off-screen color texture, rather than directly to the window.
@@ -182,16 +166,16 @@ SDL_AppResult App::iterate() {
             return SDL_APP_FAILURE;
         }
         
-        glBindFramebuffer(GL_FRAMEBUFFER, bufferFramebuffer_);
+        glBindFramebuffer(GL_FRAMEBUFFER, bufferFramebuffer_.id());
 
         setCommonUniforms(*bufferShader_, width, height, time);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, noiseTexture_);
+        glBindTexture(GL_TEXTURE_2D, noiseTexture_.id());
         bufferShader_->setInt("iChannel0", 0);
 
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, whiteTexture_);
+        glBindTexture(GL_TEXTURE_2D, whiteTexture_.id());
         bufferShader_->setInt("iChannel1", 1);
         
         glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -206,29 +190,30 @@ SDL_AppResult App::iterate() {
 
     
     if (selectedEffect_->interaction == InteractionMode::Moon) {
-        shader_->setFloat("uZoom", moonInteraction_.zoom);
-        shader_->setVec2("uViewCenter", moonInteraction_.viewCenter);
-        shader_->setVec3("uMoon", moonInteraction_.moon);
+        const MoonInteraction& moon = moonController_.state();
+        shader_->setFloat("uZoom", moon.zoom);
+        shader_->setVec2("uViewCenter", moon.viewCenter);
+        shader_->setVec3("uMoon", moon.moon);
         
         for (int i = 0; i < moonRippleCount; ++i) {
-            shader_->setVec4("uRipples[" + std::to_string(i) + "]", moonInteraction_.ripples[i]);
+            shader_->setVec4("uRipples[" + std::to_string(i) + "]", moon.ripples[i]);
         }
     }
     
     if (selectedEffect_->resources == ResourceProfile::GlyphAtlasAndNoise) {
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, matrixTextures_[0]);
+        glBindTexture(GL_TEXTURE_2D, matrixTextures_[0].id());
 
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, matrixTextures_[1]);
+        glBindTexture(GL_TEXTURE_2D, matrixTextures_[1].id());
     }
     else if (selectedEffect_->resources == ResourceProfile::NoiseAndWhite) {
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, selectedEffect_->pipeline == Pipeline::TwoPass ? bufferColorTexture_ : noiseTexture_);
+        glBindTexture(GL_TEXTURE_2D, selectedEffect_->pipeline == Pipeline::TwoPass ? bufferColorTexture_.id() : noiseTexture_.id());
         shader_->setInt("iChannel0", 0);
 
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, whiteTexture_);
+        glBindTexture(GL_TEXTURE_2D, whiteTexture_.id());
         shader_->setInt("iChannel1", 1);
     }
 
@@ -260,10 +245,7 @@ SDL_AppResult App::event(SDL_Event *event) {
                 if (event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
                     wheelY = -wheelY;
                 }
-                auto& state = moonInteraction_;
-                const float oldZoom = state.zoom;
-                state.zoom = std::clamp(oldZoom * std::exp(wheelY * 0.12f), 0.65f, 3.0f);
-                state.viewCenter = anchor - (anchor - state.viewCenter) * (oldZoom / state.zoom);
+                moonController_.zoomAt(anchor, wheelY);
             }
         }
         break;
@@ -272,11 +254,8 @@ SDL_AppResult App::event(SDL_Event *event) {
             break;
         }
 
-        auto& state = moonInteraction_;
-
         if (event->button.button == SDL_BUTTON_RIGHT) {
-            state.zoom = 1.0f;
-            state.viewCenter = glm::vec2(0.0f);
+            moonController_.resetView();
             break;
         }
 
@@ -289,28 +268,9 @@ SDL_AppResult App::event(SDL_Event *event) {
             break;
         }
 
-        // Left-click the moon: Apply an elastic impulse.
-        if (glm::length(point - glm::vec2(state.moon)) <= state.moon.z &&
-            point.y > horizonHeight(point.x, state.frameTime)) {
-            state.moonVelocity =
-                std::min(state.moonVelocity + 5.0f, 6.0f);
-            break;
-        }
-
-        // Left-click in other areas: sky is 1, water surface is 2.
-        const float kind =
-            point.y <= horizonHeight(point.x, state.frameTime)
-                ? 2.0f
-                : 1.0f;
-
         const float time =
             static_cast<float>(SDL_GetTicks() - startTicks_) / 1000.0f;
-
-        state.ripples[state.nextRipple] =
-            glm::vec4(point, time, kind);
-
-        state.nextRipple =
-            (state.nextRipple + 1) % moonRippleCount;
+        moonController_.click(point, time);
         break;
         }
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -322,35 +282,19 @@ SDL_AppResult App::event(SDL_Event *event) {
 void App::quit(SDL_AppResult /*result*/) {
     // Clear OpenGL objects before destroy glContext
     if (glContext_) {
-        if (vertexArray_ != 0) {
-            glDeleteVertexArrays(1, &vertexArray_);
-            vertexArray_ = 0;
-        }
-
-        glDeleteTextures(static_cast<GLsizei>(matrixTextures_.size()), matrixTextures_.data());
-        matrixTextures_.fill(0);
+        vertexArray_.reset();
+        for (auto& texture : matrixTextures_) texture.reset();
         
-        if (bufferShader_) {
-            glDeleteProgram(bufferShader_->ID);
-            bufferShader_.reset();
-        }
+        bufferShader_.reset();
 
-        glDeleteTextures(1, &noiseTexture_);
-        noiseTexture_ = 0;
-        glDeleteTextures(1, &whiteTexture_);
-        whiteTexture_ = 0;
-        glDeleteTextures(1, &bufferColorTexture_);
-        bufferColorTexture_ = 0;
-
-        glDeleteFramebuffers(1, &bufferFramebuffer_);
-        bufferFramebuffer_ = 0;
+        noiseTexture_.reset();
+        whiteTexture_.reset();
+        bufferColorTexture_.reset();
+        bufferFramebuffer_.reset();
         bufferTargetWidth_ = 0;
         bufferTargetHeight_ = 0;
 
-        if (shader_) {
-            glDeleteProgram(shader_->ID);
-            shader_.reset();
-        }
+        shader_.reset();
         
         SDL_GL_DestroyContext(glContext_);
         glContext_ = nullptr;
@@ -392,35 +336,6 @@ void App::setCommonUniforms(const Shader &shader, int framebufferWidth,  int fra
     shader.setVec2("uMouse", mouse);
 }
 
-void App::updateMoon(float aspect, float time, float deltaTime) {
-    constexpr float horizonBase = -0.12f;
-    constexpr float damping = 4.5f;
-    constexpr float frequency = 12.0f;
-    
-    auto& state = moonInteraction_;
-
-    const float a = state.moonStretch;
-    const float b = (state.moonVelocity + damping * a) / frequency;
-    const float decay = std::exp(-damping * deltaTime);
-    const float c = std::cos(frequency * deltaTime);
-    const float s = std::sin(frequency * deltaTime);
-
-    state.moonStretch = decay * (a * c + b * s);
-    state.moonVelocity = decay * (
-        (b * frequency - damping * a) * c -
-        (a * frequency + damping * b) * s
-    );
-
-    state.moon = glm::vec3(
-        aspect * 0.22f,
-        horizonBase + moonRadius + 0.025f +
-            0.23f * (1.0f - std::exp(-time * 0.018f)),
-        moonRadius * (1.0f + state.moonStretch)
-    );
-    
-    state.frameTime = time;
-}
-
 bool App::cursorScenePosition(glm::vec2 &point) const { 
     int windowWidth = 0;
     int windowHeight = 0;
@@ -445,47 +360,35 @@ bool App::cursorScenePosition(glm::vec2 &point) const {
         return false;
     }
     
-    // SDL: Logical window coordinates, with the origin at the top-left.
-    // Shader space: Origin at the bottom-left, with horizontal scaling adjusted based on the framebuffer's aspect ratio.
-    const float aspect =
-        static_cast<float>(framebufferWidth) / framebufferHeight;
-
-    const glm::vec2 screen(
-        (2.0f * mouseX / windowWidth - 1.0f) * aspect,
-        1.0f - 2.0f * mouseY / windowHeight
+    point = moonController_.scenePosition(
+        {mouseX, mouseY},
+        {static_cast<float>(windowWidth), static_cast<float>(windowHeight)},
+        {static_cast<float>(framebufferWidth), static_cast<float>(framebufferHeight)}
     );
-
-    point = moonInteraction_.viewCenter +
-        screen / moonInteraction_.zoom;
 
     return true;
 }
 
-float App::horizonHeight(float x, float time) const { 
-    constexpr float horizonBase = -0.12f;
-
-    return horizonBase + 0.009f * std::sin(x * 4.2f - time * 0.42f) + 0.004f * std::sin(x * 10.7f + time * 0.63f + 1.4f) + 0.002f * std::sin(x * 22.0f - time * 0.85f + 0.6f);
-}
-
 bool App::ensureBufferTarget(int width, int height) { 
-    if (bufferFramebuffer_ != 0 && bufferColorTexture_ != 0 && bufferTargetWidth_ == width && bufferTargetHeight_ == height) {
+    if (bufferFramebuffer_.id() != 0 && bufferColorTexture_.id() != 0 && bufferTargetWidth_ == width && bufferTargetHeight_ == height) {
         return true;
     }
 
-    glDeleteFramebuffers(1, &bufferFramebuffer_);
-    glDeleteTextures(1, &bufferColorTexture_);
-    
-    bufferFramebuffer_ = 0;
-    bufferColorTexture_ = 0;
+    bufferFramebuffer_.reset();
+    bufferColorTexture_.reset();
     bufferTargetWidth_ = 0;
     bufferTargetHeight_ = 0;
     
     glActiveTexture(GL_TEXTURE0);
 
-    if (!shader_test::createBufferTarget(width, height, bufferFramebuffer_, bufferColorTexture_)) {
+    GLuint framebuffer = 0;
+    GLuint colorTexture = 0;
+    if (!shader_test::createBufferTarget(width, height, framebuffer, colorTexture)) {
         SDL_Log("up_in_cloud_sea Buffer frame buffer is incomplete: %s", SDL_GetError());
         return false;
     }
+    bufferFramebuffer_.reset(framebuffer);
+    bufferColorTexture_.reset(colorTexture);
     
     bufferTargetWidth_ = width;
     bufferTargetHeight_ = height;
