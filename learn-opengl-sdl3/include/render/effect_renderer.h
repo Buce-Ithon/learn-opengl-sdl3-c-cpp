@@ -5,9 +5,9 @@
 #include "effects/effect.h"
 #include "effects/moon_controller.h"
 
-#include <array>
 #include <filesystem>
 #include <memory>
+#include <vector>
 
 struct FrameUniforms {
     glm::vec2 framebufferSize{};
@@ -24,8 +24,12 @@ public:
 
 private:
     const Effect* effect_ = nullptr;
-    std::unique_ptr<Shader> imageShader_;
-    std::unique_ptr<Shader> bufferShader_;
+    struct CompiledPass {
+        const PassDefinition* definition;
+        std::unique_ptr<Shader> shader;
+    };
+
+    std::vector<CompiledPass> passes_;
     std::array<Texture2D, 2> matrixTextures_{};
     Texture2D noiseTexture_;
     Texture2D whiteTexture_;
@@ -35,6 +39,7 @@ private:
     glm::ivec2 bufferSize_{};
 
     void setCommonUniforms(const Shader& shader, const FrameUniforms& frame) const;
-    void bindEffectInputs(bool useBufferOutput) const;
+    void bindInputs(const Shader& shader, const PassDefinition& pass) const;
+    [[nodiscard]] GLuint texture(TextureSource source) const;
     [[nodiscard]] bool ensureBufferTarget(glm::ivec2 size);
 };

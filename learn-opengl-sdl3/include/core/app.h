@@ -4,6 +4,7 @@
 #include "effects/effect.h"
 #include "effects/moon_controller.h"
 #include "render/effect_renderer.h"
+#include "platform/sdl_opengl_window.h"
 
 class App {
 public:
@@ -17,8 +18,7 @@ public:
     void          quit(SDL_AppResult result);
     
 private:
-    SDL_Window*   window_    = nullptr;
-    SDL_GLContext glContext_ = nullptr;
+    SdlOpenGlWindow platform_;
     EffectRenderer renderer_;
     Uint64 startTicks_ = 0;
     

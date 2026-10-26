@@ -1,8 +1,9 @@
 #include "core/app.h"
 
+#include "app/launch_options.h"
+
 #include "SDL3/SDL_error.h"
 #include "SDL3/SDL_events.h"
-#include "SDL3/SDL_filesystem.h"
 #include "SDL3/SDL_init.h"
 #include "SDL3/SDL_keycode.h"
 #include "SDL3/SDL_mouse.h"
@@ -10,19 +11,15 @@
 #include "SDL3/SDL_video.h"
 #include "core/mouse_event.h"
 #include "glad/glad.h"
+#include "platform/asset_locator.h"
 
+#include <exception>
 #include <filesystem>
 #include <iostream>
-#include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
-std::filesystem::path shaderDirectory() {
-    const char* basePath = SDL_GetBasePath();
-    if (basePath == nullptr) throw std::runtime_error(std::string("Unable to determine application directory: ") + SDL_GetError());
-    return std::filesystem::path(basePath) / "assets" / "shaders";
-}
-
 glm::vec2 shaderMousePosition(SDL_Window* window, glm::vec2 framebufferSize) {
     int windowWidth = 0;
     int windowHeight = 0;
@@ -36,49 +33,39 @@ glm::vec2 shaderMousePosition(SDL_Window* window, glm::vec2 framebufferSize) {
 }
 
 SDL_AppResult App::init(int argc, char** argv) {
-    selectedEffect_ = &availableEffects().front();
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        if (arg == "--list") {
-            for (const Effect& effect : availableEffects()) std::cout << effect.name << " " << effect.description << '\n';
-            return SDL_APP_SUCCESS;
-        }
-        if (arg == "--effect") {
-            if (++i == argc) {
-                std::cerr << "--effect requires a name.\n";
-                return SDL_APP_FAILURE;
-            }
-            selectedEffect_ = findEffect(argv[i]);
-            if (selectedEffect_ == nullptr) {
-                std::cerr << "Unknown effect: " << argv[i] << '\n';
-                return SDL_APP_FAILURE;
-            }
-        }
-    }
-
-    SDL_SetAppMetadata("Learn OpenGL SDL3", "1.0", "io.github.buce-ithon.learnopenglsdl3");
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
-        SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-
-    window_ = SDL_CreateWindow("learn-opengl-sdl3", 800, 600, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_OPENGL);
-    if (window_ == nullptr) {
-        SDL_Log("Failed to create window: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-    if (!SDL_SetWindowHitTest(window_, HitTestCallback, nullptr)) SDL_Log("Hit testing is not supported on this platform: %s", SDL_GetError());
-
-    glContext_ = SDL_GL_CreateContext(window_);
-    if (glContext_ == nullptr || !gladLoadGLLoader(reinterpret_cast<GLADloadproc>(SDL_GL_GetProcAddress))) {
-        SDL_Log("Failed to create OpenGL context: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
+    LaunchOptions options;
     try {
-        renderer_.initialize(*selectedEffect_, shaderDirectory());
+        options = parseLaunchOptions(argc, argv);
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return SDL_APP_FAILURE;
+    }
+    if (options.listEffects) {
+        for (const Effect& effect : availableEffects()) std::cout << effect.name << " " << effect.description << '\n';
+        return SDL_APP_SUCCESS;
+    }
+    selectedEffect_ = options.effect;
+
+    std::filesystem::path shaderPath;
+    try {
+        shaderPath = shaderDirectory();
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return SDL_APP_FAILURE;
+    }
+    const std::vector<std::string> validationErrors = validateEffectRegistry(shaderPath);
+    if (!validationErrors.empty()) {
+        for (const std::string& error : validationErrors) std::cerr << error << '\n';
+        return SDL_APP_FAILURE;
+    }
+
+    if (!platform_.initialize("learn-opengl-sdl3", 800, 600)) {
+        SDL_Log("Failed to initialize SDL/OpenGL: %s", platform_.error().c_str());
+        return SDL_APP_FAILURE;
+    }
+    if (!SDL_SetWindowHitTest(platform_.window(), HitTestCallback, nullptr)) SDL_Log("Hit testing is not supported on this platform: %s", SDL_GetError());
+    try {
+        renderer_.initialize(*selectedEffect_, shaderPath);
     } catch (const std::exception& error) {
         SDL_Log("Failed to initialize effect renderer: %s", error.what());
         return SDL_APP_FAILURE;
@@ -92,7 +79,7 @@ SDL_AppResult App::init(int argc, char** argv) {
 SDL_AppResult App::iterate() {
     int width = 0;
     int height = 0;
-    if (!SDL_GetWindowSizeInPixels(window_, &width, &height) || width <= 0 || height <= 0) return SDL_APP_CONTINUE;
+    if (!SDL_GetWindowSizeInPixels(platform_.window(), &width, &height) || width <= 0 || height <= 0) return SDL_APP_CONTINUE;
 
     const Uint64 nowTicks = SDL_GetTicks();
     const float time = static_cast<float>(nowTicks - startTicks_) / 1000.0f;
@@ -106,12 +93,12 @@ SDL_AppResult App::iterate() {
         moon = &moonController_.state();
     }
 
-    const FrameUniforms frame{framebufferSize, shaderMousePosition(window_, framebufferSize), time};
+    const FrameUniforms frame{framebufferSize, shaderMousePosition(platform_.window(), framebufferSize), time};
     if (!renderer_.render(frame, moon)) {
         SDL_Log("OpenGL rendering failed.");
         return SDL_APP_FAILURE;
     }
-    SDL_GL_SwapWindow(window_);
+    platform_.swap();
     return SDL_APP_CONTINUE;
 }
 
@@ -141,16 +128,8 @@ SDL_AppResult App::event(SDL_Event* event) {
 }
 
 void App::quit(SDL_AppResult /*result*/) {
-    if (glContext_ != nullptr) {
-        renderer_.shutdown();
-        SDL_GL_DestroyContext(glContext_);
-        glContext_ = nullptr;
-    }
-    if (window_ != nullptr) {
-        SDL_DestroyWindow(window_);
-        window_ = nullptr;
-    }
-    SDL_Quit();
+    renderer_.shutdown();
+    platform_.shutdown();
 }
 
 bool App::cursorScenePosition(glm::vec2& point) const {
@@ -160,7 +139,7 @@ bool App::cursorScenePosition(glm::vec2& point) const {
     int framebufferHeight = 0;
     float mouseX = 0.0f;
     float mouseY = 0.0f;
-    if (!SDL_GetWindowSize(window_, &windowWidth, &windowHeight) || !SDL_GetWindowSizeInPixels(window_, &framebufferWidth, &framebufferHeight) || windowWidth <= 0 || windowHeight <= 0 || framebufferWidth <= 0 || framebufferHeight <= 0) return false;
+    if (!SDL_GetWindowSize(platform_.window(), &windowWidth, &windowHeight) || !SDL_GetWindowSizeInPixels(platform_.window(), &framebufferWidth, &framebufferHeight) || windowWidth <= 0 || windowHeight <= 0 || framebufferWidth <= 0 || framebufferHeight <= 0) return false;
     SDL_GetMouseState(&mouseX, &mouseY);
     if (mouseX < 0.0f || mouseY < 0.0f || mouseX >= windowWidth || mouseY >= windowHeight) return false;
     point = moonController_.scenePosition({mouseX, mouseY}, {static_cast<float>(windowWidth), static_cast<float>(windowHeight)}, {static_cast<float>(framebufferWidth), static_cast<float>(framebufferHeight)});
