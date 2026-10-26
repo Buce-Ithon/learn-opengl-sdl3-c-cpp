@@ -9,6 +9,11 @@ out vec4 FragColor;
 uniform vec2 uResolution;
 uniform float uTime;
 
+// @param uAnimationSpeed float 0.0 3.0 0.8 "Animation speed"
+uniform float uAnimationSpeed;
+// @param uSway float 0.0 0.1 0.02 "Branch sway"
+uniform float uSway;
+
 float hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
@@ -64,12 +69,12 @@ void main()
     vec2 uv = (fragCoord - 0.5 * iResolution.xy) / iResolution.y;
     
     // animation times
-    float t = iTime * 0.8; 
+    float t = iTime * uAnimationSpeed;
     float t_sun     = clamp((t - 0.5) / 1.5, 0.0, 1.0); 
     float t_mnt     = clamp((t - 2.0) / 2.0, 0.0, 1.0); 
     float t_branch  = clamp((t - 4.0) / 2.0, 0.0, 1.0); 
     float t_flowers = clamp((t - 6.0) / 2.5, 0.0, 1.0); 
-    float swayStrength = smoothstep(9.0, 11.0, t) * 0.02;         
+    float swayStrength = smoothstep(9.0, 11.0, t) * uSway;
     
     // 1. PAPER BACKGROUND
     vec3 col = vec3(0.97, 0.95, 0.92);

@@ -17,20 +17,66 @@ bool passRequires(std::span<const PassDefinition> passes, TextureSource wanted) 
 
 void EffectRenderer::initialize(const Effect& effect, const std::filesystem::path& shaderDirectory) {
     shutdown();
-    if (const std::string validationError = validateEffect(effect, shaderDirectory); !validationError.empty()) throw std::invalid_argument(validationError);
-    effect_ = &effect;
-    const std::filesystem::path vertexPath = shaderDirectory / "fullscreen.vert";
+    std::string error;
+    if (!loadImpl(effect, shaderDirectory, false, error)) throw std::invalid_argument(error);
+}
 
-    for (const PassDefinition& definition : effect.passes) {
-        passes_.push_back({&definition, std::make_unique<Shader>(vertexPath.string().c_str(), (shaderDirectory / definition.fragment).string().c_str())});
+bool EffectRenderer::load(const Effect& effect, const std::filesystem::path& shaderDirectory, std::string& error) {
+    return loadImpl(effect, shaderDirectory, false, error);
+}
+
+bool EffectRenderer::reload(const std::filesystem::path& shaderDirectory, std::string& error) {
+    if (effect_ == nullptr) {
+        error = "No effect is loaded.";
+        return false;
     }
+    return loadImpl(*effect_, shaderDirectory, true, error);
+}
+
+bool EffectRenderer::loadImpl(const Effect& effect, const std::filesystem::path& shaderDirectory, bool inheritParameters, std::string& error) {
+    error.clear();
+    if (const std::string validationError = validateEffect(effect, shaderDirectory); !validationError.empty()) {
+        error = validationError;
+        return false;
+    }
+
+    // Compile and stage everything first so a broken edit never discards the running effect.
+    std::vector<CompiledPass> newPasses;
+    ParameterSet newParameters;
+    try {
+        const std::filesystem::path vertexPath = shaderDirectory / "fullscreen.vert";
+        for (const PassDefinition& definition : effect.passes) {
+            newPasses.push_back({&definition, std::make_unique<Shader>(vertexPath.string().c_str(), (shaderDirectory / definition.fragment).string().c_str())});
+        }
+        for (const PassDefinition& definition : effect.passes) {
+            if (!newParameters.addAnnotations(shaderDirectory / definition.fragment, error)) return false;
+        }
+        for (const CompiledPass& pass : newPasses) newParameters.reflectProgram(pass.shader->id());
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
+
+    std::array<Texture2D, 2> newMatrixTextures;
+    Texture2D newNoiseTexture;
+    Texture2D newWhiteTexture;
     if (passRequires(effect.passes, TextureSource::MatrixGlyphAtlas) || passRequires(effect.passes, TextureSource::MatrixNoise)) {
         const auto textureIds = render::createMatrixTextures();
-        for (std::size_t i = 0; i < matrixTextures_.size(); ++i) matrixTextures_[i].reset(textureIds[i]);
+        for (std::size_t i = 0; i < newMatrixTextures.size(); ++i) newMatrixTextures[i].reset(textureIds[i]);
     }
-    if (passRequires(effect.passes, TextureSource::ProceduralNoise)) noiseTexture_.reset(render::createNoiseTexture());
-    if (passRequires(effect.passes, TextureSource::White)) whiteTexture_.reset(render::createWhiteTexture());
-    vertexArray_.create();
+    if (passRequires(effect.passes, TextureSource::ProceduralNoise)) newNoiseTexture.reset(render::createNoiseTexture());
+    if (passRequires(effect.passes, TextureSource::White)) newWhiteTexture.reset(render::createWhiteTexture());
+
+    if (inheritParameters) newParameters.inheritValues(parameters_);
+    if (vertexArray_.id() == 0) vertexArray_.create();
+
+    passes_ = std::move(newPasses);
+    matrixTextures_ = std::move(newMatrixTextures);
+    noiseTexture_ = std::move(newNoiseTexture);
+    whiteTexture_ = std::move(newWhiteTexture);
+    parameters_ = std::move(newParameters);
+    effect_ = &effect;
+    return true;
 }
 
 void EffectRenderer::shutdown() {
@@ -41,6 +87,7 @@ void EffectRenderer::shutdown() {
     bufferColorTexture_.reset();
     bufferFramebuffer_.reset();
     passes_.clear();
+    parameters_ = {};
     effect_ = nullptr;
     bufferSize_ = {};
 }
@@ -65,6 +112,7 @@ bool EffectRenderer::render(const FrameUniforms& frame, const MoonInteraction* m
         }
         glViewport(0, 0, size.x, size.y);
         setCommonUniforms(*pass.shader, frame);
+        parameters_.apply(*pass.shader);
         if (moon != nullptr && pass.definition->acceptsMoonInteraction) {
             pass.shader->setFloat(std::string(shader_uniform::moonZoom), moon->zoom);
             pass.shader->setVec2(std::string(shader_uniform::moonViewCenter), moon->viewCenter);

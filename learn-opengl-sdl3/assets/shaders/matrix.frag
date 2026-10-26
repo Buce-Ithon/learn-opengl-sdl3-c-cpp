@@ -8,6 +8,13 @@ uniform sampler2D iChannel0; // 16 x 16 character atlas; red = glyph coverage.
 uniform sampler2D iChannel1; // Repeatable two-channel noise, using as a random-number-sheet to choose character.
 uniform vec3 iChannelResolution[2]; // Resolution of iChannel0 and iChannel1 (include width and height)
 
+// @param uRainSpeed float 0.1 3.0 1.0 "Rain speed"
+uniform float uRainSpeed;
+// @param uNoiseScroll float 0.0 0.02 0.002 "Noise scroll"
+uniform float uNoiseScroll;
+// @param uFalloff float 4.0 80.0 20.0 "Trail falloff"
+uniform float uFalloff;
+
 /**
  * @details Divide the screen into a grid of 16×16-pixel cells, randomly select a glyph from a character set for each cell, and return the coverage of that character at the current pixel location.
  * @param fragCoord Screen pixel coordinates of the current fragment.
@@ -27,7 +34,7 @@ float text(vec2 fragCoord)
     // Each character cell receives a random 2D index derived from dynamic noise `iChannel1`.
     // `texture(iChannel1, uv)`: Reads a `vec4(R, G, B, A)` from the texture `iChannel1` at the specified `uv` position (`uv` must be normalized).
     // `block / iChannelResolution[1].xy + iTime * 0.002` it's not conflict with "`uv` parameter in texture() must be normalized in 0~1", because iChannel1 is a repeatable two-channel noise which is similiar with `glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);`. So as it's over 0~1, the GPU treats this uv coordinates that fall outside the range as fractional parts. 
-    vec2 randomValue = texture(iChannel1, block / iChannelResolution[1].xy + iTime * 0.002).xy;
+    vec2 randomValue = texture(iChannel1, block / iChannelResolution[1].xy + iTime * uNoiseScroll).xy;
     // Normalized 8-bit textures (`randomValue`) can return exactly 1.0: so we need keep tile IDs in 0..15.
     uv += min(floor(randomValue * 16.0), vec2(15.0));
     uv *= 0.0625; // normalize for following texture()
@@ -57,9 +64,9 @@ vec3 rain(vec2 fragCoord)
      *- `fract(...)`: Retains only the fractional part, causing the value to cycle continuously within the range [0, 1).
      *Thus, `y` can be interpreted as the cyclic distance from the current character to the "head" of the raindrop in its respective column. Once a raindrop moves beyond the screen boundary, the `fract` function causes it to reappear from the opposite side.
     */
-    float y = fract(fragCoord.y / iResolution.y + iTime * speed + offset);
+    float y = fract(fragCoord.y / iResolution.y + iTime * speed * uRainSpeed + offset);
     // Avoid division by zero (and 0 * infinity on black glyph pixels).
-    return vec3(0.1, 0.35, 1.0) / max(y * 20.0, 0.001);
+    return vec3(0.1, 0.35, 1.0) / max(y * uFalloff, 0.001);
 }
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord)
