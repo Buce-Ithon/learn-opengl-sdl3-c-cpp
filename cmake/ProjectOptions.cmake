@@ -8,14 +8,14 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if (CMAKE_GENERATOR MATCHES "Makefiles|Ninja")
-	if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-		add_custom_target(
-			CopyCompileCommands ALL
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				${CMAKE_BINARY_DIR}/compile_commands.json
-				${CMAKE_CURRENT_SOURCE_DIR}/compile_commands.json
-			DEPENDS ${CMAKE_BINARY_DIR}/compile_commands.json
-			COMMENT "Copy compile_commands.json to the project source directory."
-		)
-	endif()
+    if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+        add_custom_target(
+            CopyCompileCommands ALL
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_BINARY_DIR}/compile_commands.json
+                ${CMAKE_CURRENT_SOURCE_DIR}/compile_commands.json
+            DEPENDS ${CMAKE_BINARY_DIR}/compile_commands.json
+            COMMENT "Copy compile_commands.json to the project source directory."
+        )
+    endif()
 endif()
